@@ -12,16 +12,42 @@
       align-items: center; justify-content: center; height: 100vh; box-sizing: border-box;
     }
     #reader { width: 100%; max-width: 420px; border-radius: 12px; overflow: hidden; border: 2px solid #3b82f6; }
-    #status { margin-top: 10px; font-size: 14px; color: #38bdf8; text-align: center; font-weight: 500; }
+    #status { margin-top: 12px; font-size: 15px; color: #38bdf8; text-align: center; font-weight: bold; }
   </style>
 </head>
 <body>
 
   <div id="reader"></div>
-  <div id="status">Mengaktifkan Kamera...</div>
+  <div id="status">Arahkan Kamera ke QR Code</div>
 
   <script>
-    let isScanning = true;
+    // MASUKKAN URL WEB APP APPS SCRIPT ANDA DI SINI
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz9N6LBG_0SyKYZi4Ug7txLokMRUgNejKoZ0yU-h0JFvxaeaoP_l7_a_zIv4H7dxXw5/exec"; 
+
+    let isProcessing = false;
+
+    // Fungsi Suara Beep
+    function playBeep(isSuccess) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        if (isSuccess) {
+          osc.frequency.setValueAtTime(1000, ctx.currentTime); // Beep Sukses
+          gain.gain.setValueAtTime(0.2, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.2);
+        } else {
+          osc.frequency.setValueAtTime(300, ctx.currentTime); // Beep Gagal
+          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.4);
+        }
+      } catch(e) {}
+    }
 
     function startScanner() {
       const html5QrcodeScanner = new Html5Qrcode("reader");
@@ -37,24 +63,45 @@
     }
 
     function onScanSuccess(decodedText) {
-      if (!isScanning) return;
-      isScanning = false; // Kunci agar tidak berulang membaca saat memproses
+      if (isProcessing) return;
+      isProcessing = true;
 
-      document.getElementById('status').innerText = 'QR Terbaca: ' + decodedText + '. Memproses...';
+      document.getElementById('status').innerText = 'Memproses NISN: ' + decodedText + '...';
 
-      // Kirim hasil NISN ke Apps Script utama
-      if (window.opener) {
-        window.opener.postMessage({
-          type: 'QR_SCAN_RESULT',
-          code: decodedText
-        }, '*');
-      }
+      // Ambil parameter Kelas dari URL / Window induk
+      let kelas = "9B"; 
+      try {
+        if (window.opener && window.opener.document) {
+          let sel = window.opener.document.querySelector('select');
+          if (sel) kelas = sel.value;
+        }
+      } catch(e){}
 
-      // Aktifkan pemindaian kembali setelah 3 detik
-      setTimeout(() => {
-        isScanning = true;
-        document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code';
-      }, 3000);
+      // Kirim Data Langsung ke Spreadsheet via Web App API
+      fetch(WEB_APP_URL + "?action=scanQR&nisn=" + encodeURIComponent(decodedText) + "&kelas=" + encodeURIComponent(kelas))
+        .then(response => response.json())
+        .then(res => {
+          if (res.status === 'success') {
+            playBeep(true);
+            document.getElementById('status').innerText = '✅ ' + res.message;
+            alert("✅ Absensi Berhasil!\n\nNama: " + res.nama + "\nNISN: " + res.nisn + "\nStatus: " + res.keterangan);
+          } else {
+            playBeep(false);
+            document.getElementById('status').innerText = '❌ ' + res.message;
+            alert("❌ DITOLAK:\n" + res.message);
+          }
+          
+          setTimeout(() => {
+            isProcessing = false;
+            document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code';
+          }, 3000);
+        })
+        .catch(err => {
+          playBeep(false);
+          document.getElementById('status').innerText = '❌ Gagal Terhubung ke Server';
+          alert("Error: Gagal memproses data ke server!");
+          setTimeout(() => { isProcessing = false; }, 3000);
+        });
     }
 
     window.addEventListener('DOMContentLoaded', startScanner);
