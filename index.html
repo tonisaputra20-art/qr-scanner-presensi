@@ -11,8 +11,8 @@
       font-family: system-ui, sans-serif; display: flex; flex-direction: column;
       align-items: center; justify-content: center; height: 100vh; box-sizing: border-box;
     }
-    #reader { width: 100%; max-width: 420px; border-radius: 12px; overflow: hidden; border: 2px solid #3b82f6; }
-    #status { margin-top: 12px; font-size: 15px; color: #38bdf8; text-align: center; font-weight: bold; }
+    #reader { width: 100%; max-width: 400px; border-radius: 12px; overflow: hidden; border: 2px solid #3b82f6; }
+    #status { margin-top: 12px; font-size: 14px; color: #38bdf8; text-align: center; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -21,37 +21,40 @@
   <div id="status">Arahkan Kamera ke QR Code</div>
 
   <script>
-    // MASUKKAN URL WEB APP APPS SCRIPT ANDA DI SINI
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz9N6LBG_0SyKYZi4Ug7txLokMRUgNejKoZ0yU-h0JFvxaeaoP_l7_a_zIv4H7dxXw5/exec"; 
+    // SALIN URL WEB APP APPS SCRIPT ANDA DI SINI
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz9N6LBG_0SyKYZi4Ug7txLokMRUgNejKoZ0yU-h0JFvxaeaoP_I7_a_zlv4H7dxXw5/exec";
 
-    let isProcessing = false;
+    let isScanning = true;
 
-    // Fungsi Suara Beep
-    function playBeep(isSuccess) {
+    // Fungsi suara Beep tajam saat scan berhasil
+    function playBeepSound(success) {
       try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
 
-        if (isSuccess) {
-          osc.frequency.setValueAtTime(1000, ctx.currentTime); // Beep Sukses
-          gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        osc.type = 'sine';
+        if (success) {
+          osc.frequency.setValueAtTime(1800, audioCtx.currentTime); // Beep tinggi & nyaring
+          gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
           osc.start();
-          osc.stop(ctx.currentTime + 0.2);
+          osc.stop(audioCtx.currentTime + 0.12);
         } else {
-          osc.frequency.setValueAtTime(300, ctx.currentTime); // Beep Gagal
-          gain.gain.setValueAtTime(0.3, ctx.currentTime);
+          osc.frequency.setValueAtTime(400, audioCtx.currentTime); // Beep nada rendah (gagal)
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
           osc.start();
-          osc.stop(ctx.currentTime + 0.4);
+          osc.stop(audioCtx.currentTime + 0.3);
         }
-      } catch(e) {}
+      } catch (e) {}
     }
 
     function startScanner() {
       const html5QrcodeScanner = new Html5Qrcode("reader");
-      const config = { fps: 15, qrbox: { width: 220, height: 220 } };
+      const config = { fps: 10, qrbox: { width: 220, height: 220 } };
 
       html5QrcodeScanner.start(
         { facingMode: "environment" },
@@ -62,46 +65,47 @@
       });
     }
 
-    function onScanSuccess(decodedText) {
-      if (isProcessing) return;
-      isProcessing = true;
+    function onScanSuccess(nisnCode) {
+      if (!isScanning) return;
+      isScanning = false;
 
-      document.getElementById('status').innerText = 'Memproses NISN: ' + decodedText + '...';
+      document.getElementById('status').innerText = 'Mencari Data NISN: ' + nisnCode + '...';
 
-      // Ambil parameter Kelas dari URL / Window induk
-      let kelas = "9B"; 
-      try {
-        if (window.opener && window.opener.document) {
-          let sel = window.opener.document.querySelector('select');
-          if (sel) kelas = sel.value;
-        }
-      } catch(e){}
-
-      // Kirim Data Langsung ke Spreadsheet via Web App API
-      fetch(WEB_APP_URL + "?action=scanQR&nisn=" + encodeURIComponent(decodedText) + "&kelas=" + encodeURIComponent(kelas))
-        .then(response => response.json())
-        .then(res => {
-          if (res.status === 'success') {
-            playBeep(true);
-            document.getElementById('status').innerText = '✅ ' + res.message;
-            alert("✅ Absensi Berhasil!\n\nNama: " + res.nama + "\nNISN: " + res.nisn + "\nStatus: " + res.keterangan);
-          } else {
-            playBeep(false);
-            document.getElementById('status').innerText = '❌ ' + res.message;
-            alert("❌ DITOLAK:\n" + res.message);
+      // Mengirimkan data ke Apps Script menggunakan Metode POST (Tanpa mengganggu doGet/Login)
+      fetch(WEB_APP_URL, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "scanQRStandalone",
+          payload: {
+            nisn: nisnCode,
+            kelas: "9B",
+            mapel: "Presensi QR"
           }
-          
-          setTimeout(() => {
-            isProcessing = false;
-            document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code';
-          }, 3000);
         })
-        .catch(err => {
-          playBeep(false);
-          document.getElementById('status').innerText = '❌ Gagal Terhubung ke Server';
-          alert("Error: Gagal memproses data ke server!");
-          setTimeout(() => { isProcessing = false; }, 3000);
-        });
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === 'success') {
+          playBeepSound(true); // Suara Beep Sukses
+          document.getElementById('status').innerText = '✅ ' + data.nama + ' (' + data.waktu + ')';
+          alert("✅ PRESENSI BERHASIL!\n\nNama : " + data.nama + "\nNISN : " + data.nisn + "\nWaktu: " + data.waktu);
+        } else {
+          playBeepSound(false);
+          document.getElementById('status').innerText = '❌ ' + data.message;
+          alert("❌ GAGAL PRESENSI:\n" + data.message);
+        }
+
+        setTimeout(() => {
+          isScanning = true;
+          document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code';
+        }, 3000);
+      })
+      .catch(err => {
+        playBeepSound(false);
+        document.getElementById('status').innerText = '❌ Gagal koneksi ke server';
+        alert("Error: Gagal terhubung ke Apps Script.");
+        setTimeout(() => { isScanning = true; }, 3000);
+      });
     }
 
     window.addEventListener('DOMContentLoaded', startScanner);
