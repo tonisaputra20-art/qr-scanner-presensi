@@ -66,40 +66,55 @@
     }
 
     function onScanSuccess(nisnCode) {
-      if (!isScanning) return;
-      isScanning = false;
+  if (!isScanning) return;
+  isScanning = false;
 
-      document.getElementById('status').innerText = 'Mencari Data NISN: ' + nisnCode + '...';
+  document.getElementById('status').innerText = 'Mencari Data NISN: ' + nisnCode + '...';
 
-      // Mengirimkan data ke Apps Script menggunakan Metode POST (Tanpa mengganggu doGet/Login)
-      fetch(WEB_APP_URL, {
-        method: "POST",
-        body: JSON.stringify({
-          action: "scanQRStandalone",
-          payload: {
-            nisn: nisnCode,
-            kelas: "9B",
-            mapel: "Presensi QR"
-          }
-        })
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.status === 'success') {
-          playBeepSound(true); // Suara Beep Sukses
-          document.getElementById('status').innerText = '✅ ' + data.nama + ' (' + data.waktu + ')';
-          alert("✅ PRESENSI BERHASIL!\n\nNama : " + data.nama + "\nNISN : " + data.nisn + "\nWaktu: " + data.waktu);
-        } else {
-          playBeepSound(false);
-          document.getElementById('status').innerText = '❌ ' + data.message;
-          alert("❌ GAGAL PRESENSI:\n" + data.message);
-        }
+  // Format data payload
+  const payloadData = {
+    action: "scanQRStandalone",
+    payload: {
+      nisn: nisnCode,
+      kelas: "9B",
+      mapel: "Presensi QR"
+    }
+  };
 
-        setTimeout(() => {
-          isScanning = true;
-          document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code';
-        }, 3000);
-      })
+  // Mengirim data via POST dengan format text/plain agar TIDAK KENA CORS BLOCK
+  fetch(WEB_APP_URL, {
+    method: "POST",
+    mode: "cors",
+    redirect: "follow",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+    body: JSON.stringify(payloadData)
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.status === 'success') {
+      playBeepSound(true); // Membunyikan suara Beep nyaring
+      document.getElementById('status').innerText = '✅ ' + data.nama + ' (' + data.waktu + ')';
+      alert("✅ PRESENSI BERHASIL!\n\nNama : " + data.nama + "\nNISN : " + data.nisn + "\nWaktu: " + data.waktu);
+    } else {
+      playBeepSound(false); // Suara gagal
+      document.getElementById('status').innerText = '❌ ' + data.message;
+      alert("❌ GAGAL PRESENSI:\n" + data.message);
+    }
+
+    setTimeout(() => {
+      isScanning = true;
+      document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code';
+    }, 3000);
+  })
+  .catch(err => {
+    playBeepSound(false);
+    document.getElementById('status').innerText = '❌ Gagal koneksi ke server';
+    alert("Error: Gagal terhubung ke Apps Script.");
+    setTimeout(() => { isScanning = true; }, 3000);
+  });
+}
       .catch(err => {
         playBeepSound(false);
         document.getElementById('status').innerText = '❌ Gagal koneksi ke server';
