@@ -42,32 +42,43 @@
     }
 
     function sendToGAS(nisn) {
-      const statusEl = document.getElementById('status');
-      statusEl.innerText = `Memproses NISN: ${nisn}...`;
+  const statusEl = document.getElementById('status');
+  statusEl.innerText = `Memproses NISN: ${nisn}...`;
 
-      const cbName = 'cb_' + Math.floor(Math.random() * 1000000);
+  const cbName = 'cb_' + Math.floor(Math.random() * 1000000);
 
-      window[cbName] = function(res) {
-        cleanup();
-        if (res && (res.status === 'success' || res.success)) {
-          playBeepSound(true);
-          statusEl.innerText = `✅ Berhasil: ${res.nama || nisn} (${res.status_kehadiran || 'HADIR'})`;
-        } else {
-          playBeepSound(false);
-          statusEl.innerText = `❌ ${res.message || 'Gagal Merekam Presensi'}`;
-        }
-        setTimeout(() => { isScanning = true; }, 2500);
-      };
+  window[cbName] = function(res) {
+    cleanup();
+    if (res && (res.status === 'success' || res.success)) {
+      playBeepSound(true);
+      statusEl.innerText = `✅ Berhasil: ${res.nama || nisn} (${res.status_kehadiran || 'HADIR'})`;
+    } else {
+      playBeepSound(false);
+      statusEl.innerText = `❌ ${res.message || 'Gagal Merekam Presensi'}`;
+    }
+    setTimeout(() => { isScanning = true; }, 2500);
+  };
 
-      const script = document.createElement('script');
-      script.id = cbName;
-      script.src = `${WEB_APP_URL}?nisn=${encodeURIComponent(nisn)}&kelas=${encodeURIComponent(selectedKelas)}&mapel=${encodeURIComponent(selectedMapel)}&callback=${cbName}`;
+  // TAMBAHKAN action=scanQRStandalone DI URL
+  const script = document.createElement('script');
+  script.id = cbName;
+  script.src = `${WEB_APP_URL}?action=scanQRStandalone&nisn=${encodeURIComponent(nisn)}&kelas=${encodeURIComponent(selectedKelas)}&mapel=${encodeURIComponent(selectedMapel)}&callback=${cbName}`;
 
-      function cleanup() {
-        delete window[cbName];
-        const el = document.getElementById(cbName);
-        if (el) el.remove();
-      }
+  function cleanup() {
+    delete window[cbName];
+    const el = document.getElementById(cbName);
+    if (el) el.remove();
+  }
+
+  script.onerror = function() {
+    cleanup();
+    playBeepSound(false);
+    statusEl.innerText = '❌ Gagal Terhubung ke Server';
+    setTimeout(() => { isScanning = true; }, 2500);
+  };
+
+  document.body.appendChild(script);
+}
 
       script.onerror = function() {
         cleanup();
