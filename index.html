@@ -22,12 +22,12 @@
   <div id="status">Membuka Kamera...</div>
 
   <script>
+    // URL Web App Terbaru Google Apps Script
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzcQYjVnuY5K10Q_s04R3V3O1GiaqYmSdBD7Rx7aR5_ngf42ok9BuzfRDAWsL3Yzvt2/exec";
-    
-    // Ambil parameter Kelas & Mapel dari URL popup jika ada
+
     const urlParams = new URLSearchParams(window.location.search);
-    const selectedKelas = urlParams.get('kelas') || '8D';
-    const selectedMapel = urlParams.get('mapel') || 'Presensi QR';
+    const selectedKelas = urlParams.get('kelas') || '';
+    const selectedMapel = urlParams.get('mapel') || '';
 
     let isScanning = true;
     let html5QrCode = null;
@@ -71,7 +71,7 @@
 
       document.getElementById('status').innerText = 'Memverifikasi QR: ' + nisnCode + '...';
 
-      // Handler Respon JSONP
+      // Global Callback untuk JSONP
       window.handleQRResponse = function(response) {
         if (response.status === 'success') {
           playBeepSound(true);
@@ -80,7 +80,7 @@
         } else {
           playBeepSound(false);
           document.getElementById('status').innerText = '❌ ' + response.message;
-          alert("❌ GAGAL PRESENSI / INVALID:\n" + response.message);
+          alert("❌ VALIDASI GAGAL:\n" + response.message);
         }
 
         const oldScript = document.getElementById('jsonp-qr-script');
@@ -92,17 +92,17 @@
         }, 3000);
       };
 
-      // Pengiriman JSONP Tembus CORS
+      // Trik JSONP Tembus Koneksi 100%
       const script = document.createElement('script');
       script.id = 'jsonp-qr-script';
       script.src = WEB_APP_URL + '?action=scanQRStandalone&nisn=' + encodeURIComponent(nisnCode) + 
                  '&kelas=' + encodeURIComponent(selectedKelas) + 
                  '&mapel=' + encodeURIComponent(selectedMapel) + 
                  '&callback=handleQRResponse';
-      
+
       script.onerror = function() {
         playBeepSound(false);
-        document.getElementById('status').innerText = '❌ Gagal terhubung ke server';
+        document.getElementById('status').innerText = '❌ Gagal koneksi ke Apps Script';
         alert("Error: Gagal terhubung ke Apps Script.");
         setTimeout(() => { isScanning = true; }, 3000);
       };
