@@ -64,34 +64,77 @@
         });
     }
 
+    // FUNGSI PENGIRIMAN DATA UTAMA (MENGGUNAKAN JSONP / SCRIPT INJECTION)
     function onScanSuccess(nisnCode) {
       if (!isScanning) return;
       isScanning = false;
 
       document.getElementById('status').innerText = 'Memproses Presensi: ' + nisnCode + '...';
 
-      // Mengirim data menggunakan FETCH (Tembus Redirect & CORS 100%)
-      const targetUrl = WEB_APP_URL + '?action=scanQRStandalone&nisn=' + encodeURIComponent(nisnCode) + 
-                        '&kelas=' + encodeURIComponent(selectedKelas) + 
-                        '&mapel=' + encodeURIComponent(selectedMapel);
+      // 1. Buat tag script dinamis untuk memicu JSONP
+      const oldScript = document.getElementById('jsonp-script');
+      if (oldScript) oldScript.remove();
 
-      fetch(targetUrl, { method: 'GET', mode: 'no-cors' })
-        .then(() => {
-          playBeepSound(true);
-          document.getElementById('status').innerText = '✅ Presensi Terkirim!';
-          alert("✅ DATA SCAN BERHASIL DIKIRIM!\n\nNISN: " + nisnCode + "\nSistem telah mencatat kehadiran ke Google Sheet.");
-          
-          setTimeout(() => {
-            isScanning = true;
-            document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code';
-          }, 2500);
-        })
-        .catch(err => {
-          playBeepSound(false);
-          document.getElementById('status').innerText = '❌ Gagal Mengirim Data';
-          alert("Error: Gagal terhubung ke Apps Script.");
-          setTimeout(() => { isScanning = true; }, 2500);
-        });
+      const script = document.createElement('script');
+      script.id = 'jsonp-script';
+      
+      // Kirim parameter action, nisn, kelas, mapel, dan nama fungsi callback penerima
+      const targetUrl = WEB_APP_URL + '?action=scanQRStandalone' +
+                        '&nisn=' + encodeURIComponent(nisnCode) + 
+                        '&kelas=' + encodeURIComponent(selectedKelas) + 
+                        '&mapel=' + encodeURIComponent(selectedMapel) +
+                        '&callback=handleQRResponse';
+
+      script.src = targetUrl;
+      script.onerror = function() {
+        playBeepSound(false);
+        document.getElementById('status').innerText = '❌ Gagal Terhubung ke Server';
+        alert("⚠️ Gagak terhubung ke Google Apps Script. Periksa koneksi internet!");
+        setTimeout(() => { isScanning = true; }, 2500);
+      };
+
+      document.body.appendChild(script);
+    }
+
+    // CALLBACK UNTUK MENERIMA RESPONSE ASLI DARI 4_Attendance.gs VIA MAIN_ROUTER
+    function handleQRResponse(data) {
+      // Hapus tag script JSONP yang telah selesai dijalankan
+      const script = document.getElementById('jsonp-script');
+      if (script) script.remove();
+
+      if (data && (data.status === "success" || data.success === true)) {
+        playBeepSound(true);
+        
+        const namaSiswa = data.nama || data.namaSiswa || 'Siswa';
+        const nisnSiswa = data.nisn || '0125156527';
+        const statusHadir = data.status_kehadiran || data.status || 'Hadir';
+
+        document.getElementById('status').innerText = '✅ Presensi Berhasil!';
+
+        // Format Notifikasi: NAMA SISWA DI ATAS, NISN DI BENGKOK/BAWAH, STATUS BERHASIL
+        alert(
+          "✅ DATA SCAN BERHASIL!\n\n" +
+          "Nama  : " + namaSiswa + "\n" +
+          "NISN  : " + nisnSiswa + "\n" +
+          "Status: " + statusHadir + " (Berhasil Dicatat ke Google Sheet)"
+        );
+
+        setTimeout(() => {
+          isScanning = true;
+          document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code';
+        }, 2500);
+
+      } else {
+        playBeepSound(false);
+        const errMsg = data ? (data.message || data.msg) : 'Gagal memproses QR Code';
+        document.getElementById('status').innerText = '❌ Presensi Ditolak!';
+        alert("⚠️ " + errMsg);
+        
+        setTimeout(() => {
+          isScanning = true;
+          document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code';
+        }, 2500);
+      }
     }
 
     window.addEventListener('DOMContentLoaded', startCamera);
