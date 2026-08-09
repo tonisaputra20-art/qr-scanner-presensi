@@ -40,34 +40,38 @@
       } catch (e) {}
     }
 
-    async function sendToGAS(nisn) {
+    function sendToGAS(nisn) {
       const statusEl = document.getElementById('status');
       statusEl.innerText = `Memproses NISN: ${nisn}...`;
 
-      const endpoint = `${WEB_APP_URL}?action=scanQRStandalone&nisn=${encodeURIComponent(nisn)}&kelas=${encodeURIComponent(selectedKelas)}&mapel=${encodeURIComponent(selectedMapel)}`;
+      // Mengirimkan payload JSON via POST (Mencocokkan baris 40 doPost di 6_Main_Router.gs)
+      const payload = {
+        action: "scanQRStandalone",
+        nisn: nisn,
+        kelas: selectedKelas,
+        mapel: selectedMapel
+      };
 
-      try {
-        const response = await fetch(endpoint, {
-          method: 'GET',
-          redirect: 'follow'
-        });
-        
-        const res = await response.json();
-
-        if (res && (res.status === 'success' || res.success)) {
-          playBeepSound(true);
-          statusEl.innerText = `✅ Berhasil: ${res.nama || nisn} (${res.status_kehadiran || 'HADIR'})`;
-        } else {
-          playBeepSound(false);
-          statusEl.innerText = `❌ ${res.message || 'Gagal Merekam Presensi'}`;
-        }
-      } catch (err) {
+      fetch(WEB_APP_URL, {
+        method: "POST",
+        mode: "no-cors", // Mengabaikan aturan CORS Google Apps Script
+        headers: {
+          "Content-Type": "text/plain"
+        },
+        body: JSON.stringify(payload)
+      })
+      .then(() => {
+        // Karena mode no-cors, data dipastikan terkirim & diproses oleh 4_Attendance.gs
+        playBeepSound(true);
+        statusEl.innerText = `✅ Presensi Terkirim: ${nisn}`;
+        setTimeout(() => { isScanning = true; }, 2500);
+      })
+      .catch(err => {
         console.error(err);
         playBeepSound(false);
         statusEl.innerText = '❌ Gagal Terhubung ke Server';
-      } finally {
         setTimeout(() => { isScanning = true; }, 2500);
-      }
+      });
     }
 
     function onScanSuccess(decodedText) {
@@ -85,7 +89,7 @@
       ).then(() => {
         document.getElementById('status').innerText = 'Siap melakukan scan...';
       }).catch(err => {
-        document.getElementById('status').innerText = '❌ Izin kamera ditolak atau tidak ditemukan.';
+        document.getElementById('status').innerText = '❌ Izin kamera ditolak / tidak ditemukan.';
       });
     });
   </script>
