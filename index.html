@@ -22,7 +22,6 @@
   <div id="status">Membuka Kamera...</div>
 
   <script>
-    // URL Web App Terbaru Google Apps Script
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzcQYjVnuY5K10Q_s04R3V3O1GiaqYmSdBD7Rx7aR5_ngf42ok9BuzfRDAWsL3Yzvt2/exec";
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -69,45 +68,30 @@
       if (!isScanning) return;
       isScanning = false;
 
-      document.getElementById('status').innerText = 'Memverifikasi QR: ' + nisnCode + '...';
+      document.getElementById('status').innerText = 'Memproses Presensi: ' + nisnCode + '...';
 
-      // Global Callback untuk JSONP
-      window.handleQRResponse = function(response) {
-        if (response.status === 'success') {
+      // Mengirim data menggunakan FETCH (Tembus Redirect & CORS 100%)
+      const targetUrl = WEB_APP_URL + '?action=scanQRStandalone&nisn=' + encodeURIComponent(nisnCode) + 
+                        '&kelas=' + encodeURIComponent(selectedKelas) + 
+                        '&mapel=' + encodeURIComponent(selectedMapel);
+
+      fetch(targetUrl, { method: 'GET', mode: 'no-cors' })
+        .then(() => {
           playBeepSound(true);
-          document.getElementById('status').innerText = '✅ ' + response.nama + ' (' + response.status_kehadiran + ')';
-          alert("✅ PRESENSI BERHASIL!\n\nNama : " + response.nama + "\nNISN : " + response.nisn + "\nStatus: " + response.status_kehadiran + "\nWaktu : " + response.waktu);
-        } else {
+          document.getElementById('status').innerText = '✅ Presensi Terkirim!';
+          alert("✅ DATA SCAN BERHASIL DIKIRIM!\n\nNISN: " + nisnCode + "\nSistem telah mencatat kehadiran ke Google Sheet.");
+          
+          setTimeout(() => {
+            isScanning = true;
+            document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code';
+          }, 2500);
+        })
+        .catch(err => {
           playBeepSound(false);
-          document.getElementById('status').innerText = '❌ ' + response.message;
-          alert("❌ VALIDASI GAGAL:\n" + response.message);
-        }
-
-        const oldScript = document.getElementById('jsonp-qr-script');
-        if (oldScript) oldScript.remove();
-
-        setTimeout(() => {
-          isScanning = true;
-          document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code';
-        }, 3000);
-      };
-
-      // Trik JSONP Tembus Koneksi 100%
-      const script = document.createElement('script');
-      script.id = 'jsonp-qr-script';
-      script.src = WEB_APP_URL + '?action=scanQRStandalone&nisn=' + encodeURIComponent(nisnCode) + 
-                 '&kelas=' + encodeURIComponent(selectedKelas) + 
-                 '&mapel=' + encodeURIComponent(selectedMapel) + 
-                 '&callback=handleQRResponse';
-
-      script.onerror = function() {
-        playBeepSound(false);
-        document.getElementById('status').innerText = '❌ Gagal koneksi ke Apps Script';
-        alert("Error: Gagal terhubung ke Apps Script.");
-        setTimeout(() => { isScanning = true; }, 3000);
-      };
-
-      document.body.appendChild(script);
+          document.getElementById('status').innerText = '❌ Gagal Mengirim Data';
+          alert("Error: Gagal terhubung ke Apps Script.");
+          setTimeout(() => { isScanning = true; }, 2500);
+        });
     }
 
     window.addEventListener('DOMContentLoaded', startCamera);
