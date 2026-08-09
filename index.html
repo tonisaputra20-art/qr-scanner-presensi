@@ -106,17 +106,15 @@
 
       document.getElementById('status').innerText = 'Mencari Data NISN: ' + nisnCode + '...';
 
-      // Mengirim data menggunakan URLSearchParams (Universal & Tanpa Masalah CORS)
-      const formData = new URLSearchParams();
-      formData.append("action", "scanQRStandalone");
-      formData.append("nisn", nisnCode);
-      formData.append("kelas", "9B");
-      formData.append("mapel", "Presensi QR");
+      // Mengirim data via GET sederhana (100% Tembus CORS Google Apps Script)
+      const params = new URLSearchParams({
+        action: "scanQRStandalone",
+        nisn: nisnCode,
+        kelas: "9B",
+        mapel: "Presensi QR"
+      });
 
-      fetch(WEB_APP_URL, {
-        method: "POST",
-        body: formData
-      })
+      fetch(WEB_APP_URL + "?" + params.toString())
       .then(response => response.json())
       .then(data => {
         if (data.status === 'success') {
@@ -141,7 +139,6 @@
         setTimeout(() => { isScanning = true; }, 3000);
       });
     }
-
     window.addEventListener('DOMContentLoaded', initScanner);
   </script>
 </body>
