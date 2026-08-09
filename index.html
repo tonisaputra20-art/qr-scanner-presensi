@@ -4,16 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Scanner QR Presensi</title>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; padding: 12px; background: #0f172a; color: #fff;
-      font-family: system-ui, -apple-system, sans-serif;
-      display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh;
-    }
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #fff; margin: 0; padding: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
     #reader { width: 100%; max-width: 360px; border-radius: 12px; overflow: hidden; border: 2px solid #3b82f6; background: #1e293b; }
-    #status { margin-top: 14px; font-size: 14px; color: #38bdf8; text-align: center; font-weight: 600; min-height: 24px; }
+    #status { margin-top: 16px; font-size: 15px; color: #38bdf8; text-align: center; font-weight: 600; min-height: 24px; padding: 0 10px; }
   </style>
 </head>
 <body>
@@ -22,6 +17,7 @@
   <div id="status">Membuka Kamera...</div>
 
   <script>
+    // URL Web App Google Apps Script Anda
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzcQYjVnuY5K10Q_s04R3V3O1GiaqYmSdBD7Rx7aR5_ngf42ok9BuzfRDAWsL3Yzvt2/exec";
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -29,115 +25,78 @@
     const selectedMapel = urlParams.get('mapel') || '';
 
     let isScanning = true;
-    let html5QrCode = null;
+    let html5Qrcode = null;
 
     function playBeepSound(success) {
       try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        if (success) {
-          osc.frequency.setValueAtTime(1800, audioCtx.currentTime);
-          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-          osc.connect(gain); gain.connect(audioCtx.destination);
-          osc.start(); osc.stop(audioCtx.currentTime + 0.12);
-        } else {
-          osc.frequency.setValueAtTime(400, audioCtx.currentTime);
-          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
-          osc.connect(gain); gain.connect(audioCtx.destination);
-          osc.start(); osc.stop(audioCtx.currentTime + 0.3);
-        }
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = success ? 880 : 300;
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        osc.start();
+        osc.stop(audioCtx.currentTime + (success ? 0.2 : 0.4));
       } catch (e) {}
     }
 
-    function startCamera() {
-      html5QrCode = new Html5Qrcode("reader");
-      const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+    function sendToGAS(nisn) {
+      const statusEl = document.getElementById('status');
+      statusEl.innerText = `Memproses NISN: ${nisn}...`;
 
-      html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
-        .then(() => { document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code'; })
-        .catch(() => {
-          html5QrCode.start({ facingMode: "user" }, config, onScanSuccess)
-            .then(() => { document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code'; })
-            .catch(err => { document.getElementById('status').innerText = '❌ Gagal Mengakses Kamera'; });
-        });
-    }
+      const cbName = 'cb_' + Math.floor(Math.random() * 1000000);
 
-    // FUNGSI PENGIRIMAN DATA UTAMA (MENGGUNAKAN JSONP / SCRIPT INJECTION)
-    function onScanSuccess(nisnCode) {
-      if (!isScanning) return;
-      isScanning = false;
-
-      document.getElementById('status').innerText = 'Memproses Presensi: ' + nisnCode + '...';
-
-      // 1. Buat tag script dinamis untuk memicu JSONP
-      const oldScript = document.getElementById('jsonp-script');
-      if (oldScript) oldScript.remove();
+      window[cbName] = function(res) {
+        cleanup();
+        if (res && (res.status === 'success' || res.success)) {
+          playBeepSound(true);
+          statusEl.innerText = `✅ Berhasil: ${res.nama || nisn} (${res.status_kehadiran || 'HADIR'})`;
+        } else {
+          playBeepSound(false);
+          statusEl.innerText = `❌ ${res.message || 'Gagal Merekam Presensi'}`;
+        }
+        setTimeout(() => { isScanning = true; }, 2500);
+      };
 
       const script = document.createElement('script');
-      script.id = 'jsonp-script';
-      
-      // Kirim parameter action, nisn, kelas, mapel, dan nama fungsi callback penerima
-      const targetUrl = WEB_APP_URL + '?action=scanQRStandalone' +
-                        '&nisn=' + encodeURIComponent(nisnCode) + 
-                        '&kelas=' + encodeURIComponent(selectedKelas) + 
-                        '&mapel=' + encodeURIComponent(selectedMapel) +
-                        '&callback=handleQRResponse';
+      script.id = cbName;
+      script.src = `${WEB_APP_URL}?nisn=${encodeURIComponent(nisn)}&kelas=${encodeURIComponent(selectedKelas)}&mapel=${encodeURIComponent(selectedMapel)}&callback=${cbName}`;
 
-      script.src = targetUrl;
+      function cleanup() {
+        delete window[cbName];
+        const el = document.getElementById(cbName);
+        if (el) el.remove();
+      }
+
       script.onerror = function() {
+        cleanup();
         playBeepSound(false);
-        document.getElementById('status').innerText = '❌ Gagal Terhubung ke Server';
-        alert("⚠️ Gagak terhubung ke Google Apps Script. Periksa koneksi internet!");
+        statusEl.innerText = '❌ Gagal Terhubung ke Server';
         setTimeout(() => { isScanning = true; }, 2500);
       };
 
       document.body.appendChild(script);
     }
 
-    // CALLBACK UNTUK MENERIMA RESPONSE ASLI DARI 4_Attendance.gs VIA MAIN_ROUTER
-    function handleQRResponse(data) {
-      // Hapus tag script JSONP yang telah selesai dijalankan
-      const script = document.getElementById('jsonp-script');
-      if (script) script.remove();
-
-      if (data && (data.status === "success" || data.success === true)) {
-        playBeepSound(true);
-        
-        const namaSiswa = data.nama || data.namaSiswa || 'Siswa';
-        const nisnSiswa = data.nisn || '0125156527';
-        const statusHadir = data.status_kehadiran || data.status || 'Hadir';
-
-        document.getElementById('status').innerText = '✅ Presensi Berhasil!';
-
-        // Format Notifikasi: NAMA SISWA DI ATAS, NISN DI BENGKOK/BAWAH, STATUS BERHASIL
-        alert(
-          "✅ DATA SCAN BERHASIL!\n\n" +
-          "Nama  : " + namaSiswa + "\n" +
-          "NISN  : " + nisnSiswa + "\n" +
-          "Status: " + statusHadir + " (Berhasil Dicatat ke Google Sheet)"
-        );
-
-        setTimeout(() => {
-          isScanning = true;
-          document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code';
-        }, 2500);
-
-      } else {
-        playBeepSound(false);
-        const errMsg = data ? (data.message || data.msg) : 'Gagal memproses QR Code';
-        document.getElementById('status').innerText = '❌ Presensi Ditolak!';
-        alert("⚠️ " + errMsg);
-        
-        setTimeout(() => {
-          isScanning = true;
-          document.getElementById('status').innerText = 'Arahkan Kamera ke QR Code';
-        }, 2500);
-      }
+    function onScanSuccess(decodedText) {
+      if (!isScanning) return;
+      isScanning = false;
+      sendToGAS(decodedText.trim());
     }
 
-    window.addEventListener('DOMContentLoaded', startCamera);
+    window.addEventListener('DOMContentLoaded', () => {
+      html5Qrcode = new Html5Qrcode("reader");
+      html5Qrcode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        onScanSuccess
+      ).then(() => {
+        document.getElementById('status').innerText = 'Siap melakukan scan...';
+      }).catch(err => {
+        document.getElementById('status').innerText = '❌ Izin kamera ditolak atau tidak ditemukan.';
+      });
+    });
   </script>
 </body>
 </html>
